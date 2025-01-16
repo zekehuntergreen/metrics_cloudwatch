@@ -310,14 +310,31 @@ async fn mk_emitter(
                     Ok(Ok(_output)) => {
                         log::debug!("Successfully sent a metrics batch to CloudWatch.")
                     }
-                    Ok(Err(e)) => log::warn!(
-                        "Failed to send metrics: {:?}: {}",
-                        metric_data
-                            .iter()
-                            .map(|m| &m.metric_name)
-                            .collect::<Vec<_>>(),
-                        e,
-                    ),
+                    Ok(Err(e)) => {
+                        let error_message = match e.as_service_error() {
+                            Some(PutMetricDataError::InternalServiceFault(err)) => {
+                                format!("Failed to send metrics due to InternalServiceFault: {:?}", err)
+                            }
+                            Some(PutMetricDataError::InvalidParameterCombinationException(err)) => {
+                                format!("Failed to send metrics due to InvalidParameterCombinationException: {:?}", err)
+                            }
+                            Some(PutMetricDataError::InvalidParameterValueException(err)) => {
+                                format!("Failed to send metrics due to InvalidParameterValueException: {:?}", err)
+                            }
+                            Some(PutMetricDataError::MissingRequiredParameterException(err)) => {
+                                format!("Failed to send metrics due to MissingRequiredParameterException: {:?}", err)
+                            }
+                            _ => format!("Failed to send metrics: {:?}", e),
+                        };
+                        log::warn!(
+                            "{} \n metric data: {:?}",
+                            error_message,
+                            metric_data
+                                .iter()
+                                .map(|m| &m.metric_name)
+                                .collect::<Vec<_>>(),
+                        )
+                    },
                     Err(tokio::time::error::Elapsed { .. }) => {
                         log::warn!("Failed to send metrics: send timeout")
                     }
